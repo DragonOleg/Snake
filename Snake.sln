@@ -6,6 +6,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Snake.Core", "Snake.Core\Sn
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Snake.Application", "Snake.Application\Snake.Application.csproj", "{92BA92B8-6F0E-48BC-AC36-FE9A0C6EA952}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Snake.Persistence", "Snake.Persistence\Snake.Persistence.csproj", "{1D8805D3-F138-4F27-9A51-2C6A625B4CCF}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -24,5 +26,9 @@ Global
 		{92BA92B8-6F0E-48BC-AC36-FE9A0C6EA952}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{92BA92B8-6F0E-48BC-AC36-FE9A0C6EA952}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{92BA92B8-6F0E-48BC-AC36-FE9A0C6EA952}.Release|Any CPU.Build.0 = Release|Any CPU
+		{1D8805D3-F138-4F27-9A51-2C6A625B4CCF}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{1D8805D3-F138-4F27-9A51-2C6A625B4CCF}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{1D8805D3-F138-4F27-9A51-2C6A625B4CCF}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{1D8805D3-F138-4F27-9A51-2C6A625B4CCF}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 EndGlobal
