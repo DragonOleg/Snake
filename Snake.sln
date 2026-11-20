@@ -1,0 +1,22 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Snake.Domain", "Snake.Domain\Snake.Domain.csproj", "{F5BF15D1-77CB-4C84-937A-7C4CE24ABED8}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Snake.Core", "Snake.Core\Snake.Core.csproj", "{BFA1CDD0-B326-45EB-9A58-3BC6BB9A48F2}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{F5BF15D1-77CB-4C84-937A-7C4CE24ABED8}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{F5BF15D1-77CB-4C84-937A-7C4CE24ABED8}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{F5BF15D1-77CB-4C84-937A-7C4CE24ABED8}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{F5BF15D1-77CB-4C84-937A-7C4CE24ABED8}.Release|Any CPU.Build.0 = Release|Any CPU
+		{BFA1CDD0-B326-45EB-9A58-3BC6BB9A48F2}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{BFA1CDD0-B326-45EB-9A58-3BC6BB9A48F2}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{BFA1CDD0-B326-45EB-9A58-3BC6BB9A48F2}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{BFA1CDD0-B326-45EB-9A58-3BC6BB9A48F2}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+EndGlobal
