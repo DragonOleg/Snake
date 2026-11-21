@@ -1,10 +1,14 @@
 using System;
+using System.IO;
 using System.Text;
 using Snake.Domain;
 
 namespace Snake.Application
 {
-    /// <summary>Отрисовка кадра в консоли. Полный кадр перерисовывается без Console.Clear — так нет мерцания.</summary>
+    /// <summary>
+    /// Отрисовка кадра в консоли. Кадры одного размера перерисовываются без Console.Clear — так нет мерцания,
+    /// но самый первый кадр очищает экран, чтобы не оставалось «хвостов» от экрана прогресса.
+    /// </summary>
     public class ConsoleRenderer
     {
         private const char HeadChar = '@';
@@ -14,6 +18,7 @@ namespace Snake.Application
         private const char EmptyChar = ' ';
 
         private readonly GameSettings _settings;
+        private bool _firstFrame = true;
 
         public ConsoleRenderer(GameSettings settings)
         {
@@ -30,6 +35,25 @@ namespace Snake.Application
             if (Console.IsOutputRedirected)
             {
                 return;
+            }
+
+            if (_firstFrame)
+            {
+                _firstFrame = false;
+
+                // Экран прогресса мог быть шире игрового поля — стираем его целиком,
+                // иначе справа от рамки остаются обрывки строк.
+                try
+                {
+                    Console.Clear();
+                    Console.CursorVisible = false;
+                }
+                catch (IOException)
+                {
+                }
+                catch (PlatformNotSupportedException)
+                {
+                }
             }
 
             Console.SetCursorPosition(0, 0);

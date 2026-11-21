@@ -1,19 +1,19 @@
-﻿using System;
+using System;
+using System.Collections.Generic;
 using System.IO;
+using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Logging;
-using System.Linq;
-using System.Text;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 using Snake.Application;
-using Snake.Application.Interfaces;
+using Snake.Application.Abstractions;
 using Snake.Domain;
 using Snake.Listener;
-using Snake.Persistence.Data;
+using Snake.Persistence;
+using Snake.Presentation;
 
 namespace Cert.Nats.Listener
 {
@@ -21,8 +21,7 @@ namespace Cert.Nats.Listener
     {
         private static ILogger<Program> _logger;
         private static CancellationTokenSource _cancellationTokenSource;
-        private static bool _isRunning = true;
-        
+
         public static int Main(string[] args)
         {
             _cancellationTokenSource = new CancellationTokenSource();
@@ -30,30 +29,14 @@ namespace Cert.Nats.Listener
             try
             {
                 Console.Title = @"Snake - Linux Console";
-                Console.CursorVisible = false;
-
                 Console.WriteLine(@"╔══════════════════════════════════════════════════════╗");
-                Console.WriteLine(@"║            Snake Console Application         ║");
+                Console.WriteLine(@"║            Snake Console Application                 ║");
                 Console.WriteLine(@"╚══════════════════════════════════════════════════════╝");
                 Console.WriteLine();
 
-                // Создаем хост
-                var host = CreateHostBuilder(args).Build();
-
-                // Получаем сервисы
-                //var messageQueuesQueryRepository = host.Services.GetRequiredService<IMessageQueuesQueryRepository>();
-                //var messageQueuesCommandRepository = host.Services.GetRequiredService<IMessageQueuesCommandRepository>();
-                //var natsService = host.Services.GetRequiredService<INatsService>();
-                //var messageProcessor = host.Services.GetRequiredService<IMessageProcessor>();
-                //var config = host.Services.GetRequiredService<NatsConfig>();
-
-                // Получаем логгер для программы
+                IHost host = CreateHostBuilder(args).Build();
                 _logger = host.Services.GetRequiredService<ILogger<Program>>();
-
-                // Настройка обработки Ctrl+C
                 SetupConsoleCancellation();
-
-                // Запуск основного цикла
                 Console.OutputEncoding = Encoding.UTF8;
 
                 if (args.Length > 0)
@@ -70,6 +53,11 @@ namespace Cert.Nats.Listener
                         int ticks = args.Length > 1 ? ParseInt(args[1], 300) : 300;
                         int seed = args.Length > 2 ? ParseInt(args[2], Environment.TickCount) : Environment.TickCount;
                         return DemoRunner.Run(ticks, seed);
+                    }
+
+                    if (mode == "--stats" || mode == "--scoreboard")
+                    {
+                        return ShowStats(host);
                     }
 
                     if (mode == "--help" || mode == "-h" || mode == "/?")
@@ -94,7 +82,34 @@ namespace Cert.Nats.Listener
                 GameSettings settings = CreateSettings();
                 GameEngine engine = new GameEngine(settings, new Random());
                 ConsoleRenderer renderer = new ConsoleRenderer(settings);
-                GameApp app = new GameApp(engine, renderer);
+
+                IGameResultSink sink;
+                IGameResultReader reader;
+                InitializeDatabase(host.Services, out sink, out reader);
+
+                if (reader != null)
+                {
+                    bool hasGames;
+                    if (PrintScoreboard(reader, 3, 5, out hasGames) && hasGames)
+                    {
+                        WaitForStart();
+                    }
+                }
+
+                int bestScore = 0;
+                if (reader != null)
+                {
+                    try
+                    {
+                        bestScore = reader.GetProgress().BestScore;
+                    }
+                    catch (Exception ex)
+                    {
+                        WarnDatabase(ex);
+                    }
+                }
+
+                GameApp app = new GameApp(engine, renderer, sink, bestScore);
 
                 try
                 {
@@ -103,41 +118,39 @@ namespace Cert.Nats.Listener
                 }
                 finally
                 {
-                    Console.CursorVisible = true;
-                    Console.ResetColor();
+                    TryRestoreConsole();
                 }
             }
             catch (Exception ex)
             {
                 _logger?.LogCritical(ex, "Fatal error occurred");
-                Console.WriteLine(@$"FATAL ERROR: {ex.Message}");
+                Console.WriteLine(@"FATAL ERROR: " + ex.Message);
                 Environment.Exit(1);
             }
             finally
             {
-                Console.CursorVisible = true;
-                Console.ResetColor();
+                TryRestoreConsole();
             }
 
             return 0;
         }
 
-        /// <summary>
-        /// Создание хоста с конфигурацией
-        /// </summary>
+        /// <summary>Создание хоста с конфигурацией</summary>
         public static IHostBuilder CreateHostBuilder(string[] args) =>
             Host.CreateDefaultBuilder(args)
                 .ConfigureAppConfiguration((context, config) =>
                 {
-                    config.SetBasePath(Directory.GetCurrentDirectory());
+                    // Конфиг лежит рядом со сборкой, а не в текущем каталоге:
+                    // иначе `dotnet run --project Snake.Console` из корня репозитория его не находит.
+                    string baseDirectory = AppContext.BaseDirectory;
+                    config.SetBasePath(baseDirectory);
                     config.AddJsonFile("appsettings.json", optional: false, reloadOnChange: true);
                     config.AddJsonFile($"appsettings.{context.HostingEnvironment.EnvironmentName}.json",
                         optional: true);
                     config.AddEnvironmentVariables();
                     config.AddCommandLine(args);
 
-                    // Проверяем наличие конфигурационного файла
-                    var configPath = Path.Combine(Directory.GetCurrentDirectory(), "appsettings.json");
+                    var configPath = Path.Combine(baseDirectory, "appsettings.json");
                     if (!File.Exists(configPath))
                     {
                         Console.WriteLine(@"WARNING: appsettings.json not found. Using default configuration.");
@@ -145,42 +158,13 @@ namespace Cert.Nats.Listener
                 })
                 .ConfigureServices((context, services) =>
                 {
-                    //var connectionString = context.Configuration.GetConnectionString("Snake");
-                    //services.AddDbContext<SnakeDbContext>(options =>
-                    //{
-                    //    options.UseNpgsql(connectionString);
-                    //});
-                    
-                    //services.AddScoped<ISnakeDbContext>(provider => provider.GetService<SnakeDbContext>());
+                    // PostgreSQL рядом с проектом: строка подключения "Snake" в appsettings.json.
+                    services.AddPersistence(context.Configuration);
 
-                    // ═══════════════════════════════════════════════════════
-                    // РЕПОЗИТОРИИ (Command)
-                    // ═══════════════════════════════════════════════════════
-                    
-                    // ═══════════════════════════════════════════════════════
-                    // РЕПОЗИТОРИИ (Query)
-                    // ═══════════════════════════════════════════════════════
-                    
-                    // ═══════════════════════════════════════════════════════
-                    // СЕРВИСЫ
-                    // ═══════════════════════════════════════════════════════
-                    
-                    // ═══════════════════════════════════════════════════════
-                    // Фабрики
-                    // ═══════════════════════════════════════════════════════
-                    
-                    // ═══════════════════════════════════════════════════════
-                    // Сервис обработки сообщений
-                    // ═══════════════════════════════════════════════════════
-                    
-                    // Фоновый сервис для обработки сообщений (опционально)
-                    
-                    // Логирование с настройкой для Linux консоли
                     services.AddLogging(logging =>
                     {
                         logging.ClearProviders();
 
-                        // Консольный провайдер с настройками для Linux
                         logging.AddConsole(options =>
                         {
                             options.IncludeScopes = true;
@@ -189,9 +173,9 @@ namespace Cert.Nats.Listener
                         });
 
                         var date = DateTime.Now;
+                        string logsDirectory = Path.Combine(AppContext.BaseDirectory, "logs");
 
-                        // Файловый лог для Linux
-                        logging.AddFile($"logs/snake-listener-{date.ToShortDateString()}.log",
+                        logging.AddFile(Path.Combine(logsDirectory, $"snake-listener-{date.ToShortDateString()}.log"),
                             isJson: false,
                             minimumLevel: LogLevel.Information,
                             fileSizeLimitBytes: 10_485_760); // 10 MB
@@ -201,9 +185,7 @@ namespace Cert.Nats.Listener
                 })
                 .UseConsoleLifetime(options => { options.SuppressStatusMessages = true; });
 
-        /// <summary>
-        /// Настройка обработки прерываний
-        /// </summary>
+        /// <summary>Настройка обработки прерываний</summary>
         private static void SetupConsoleCancellation()
         {
             Console.CancelKeyPress += (sender, eventArgs) =>
@@ -211,29 +193,132 @@ namespace Cert.Nats.Listener
                 _logger?.LogInformation("SIGINT (Ctrl+C) received. Shutting down gracefully...");
                 Console.WriteLine("\n\u001b[33m[WARN] Received SIGINT. Shutting down gracefully...\u001b[0m");
 
-                _isRunning = false;
-                eventArgs.Cancel = true; // Предотвращаем немедленное завершение
+                eventArgs.Cancel = true;
 
-                // Запускаем грациозное завершение в отдельном потоке
                 Task.Run(async () =>
                 {
-                    await Task.Delay(100); // Даем время для обработки
+                    await Task.Delay(100);
                     _cancellationTokenSource.Cancel();
                 });
             };
 
-            // Для Linux также обрабатываем SIGTERM
             AppDomain.CurrentDomain.ProcessExit += (sender, eventArgs) =>
             {
                 if (!_cancellationTokenSource.IsCancellationRequested)
                 {
                     _logger?.LogInformation("SIGTERM received. Shutting down...");
-                    Console.WriteLine("\n\u001b[33m[WARN] Received SIGTERM. Shutting down...\u001b[0m");
                     _cancellationTokenSource.Cancel();
                 }
             };
         }
-        
+
+        /// <summary>Подключает БД: схема, запись и чтение результатов. При ошибке игра продолжается без БД.</summary>
+        private static void InitializeDatabase(
+            IServiceProvider services,
+            out IGameResultSink sink,
+            out IGameResultReader reader)
+        {
+            sink = null;
+            reader = null;
+
+            try
+            {
+                services.GetRequiredService<IDbInitializer>().Initialize();
+                sink = services.GetRequiredService<IGameResultSink>();
+                reader = services.GetRequiredService<IGameResultReader>();
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine("[БД] PostgreSQL недоступна — результаты не сохранятся.");
+                Console.WriteLine("[БД] " + FirstLine(ex.Message));
+                Console.WriteLine("[БД] Запустите: Data\\db.ps1 start");
+                Console.WriteLine();
+                _logger?.LogWarning(ex, "Database unavailable");
+            }
+        }
+
+        private static int ShowStats(IHost host)
+        {
+            IGameResultSink sink;
+            IGameResultReader reader;
+            InitializeDatabase(host.Services, out sink, out reader);
+
+            if (reader == null)
+            {
+                return 1;
+            }
+
+            bool hasGames;
+            return PrintScoreboard(reader, 5, 10, out hasGames) ? 0 : 1;
+        }
+
+        private static bool PrintScoreboard(IGameResultReader reader, int bestCount, int recentCount, out bool hasGames)
+        {
+            hasGames = false;
+
+            try
+            {
+                GameProgress progress = reader.GetProgress();
+                hasGames = progress.HasGames;
+                IReadOnlyList<GameRunResult> best = reader.GetBest(bestCount);
+                IReadOnlyList<GameRunResult> recent = reader.GetRecent(recentCount);
+                ScoreboardView.Print(progress, best, recent);
+                return true;
+            }
+            catch (Exception ex)
+            {
+                WarnDatabase(ex);
+                return false;
+            }
+        }
+
+        private static void WarnDatabase(Exception ex)
+        {
+            Console.WriteLine("[БД] Ошибка чтения результатов: " + FirstLine(ex.Message));
+        }
+
+        /// <summary>
+        /// Даёт прочитать экран прогресса: первый кадр игры очищает консоль, поэтому без паузы
+        /// сохранённые результаты просто мелькают.
+        /// </summary>
+        private static void WaitForStart()
+        {
+            try
+            {
+                Console.WriteLine("Нажмите любую клавишу, чтобы начать…");
+                Console.ReadKey(true);
+            }
+            catch (Exception)
+            {
+                // Консоль без ввода — начинаем сразу.
+            }
+        }
+
+        private static string FirstLine(string text)
+        {
+            if (string.IsNullOrEmpty(text))
+            {
+                return string.Empty;
+            }
+
+            int index = text.IndexOfAny(new[] { '\r', '\n' });
+            return index < 0 ? text : text.Substring(0, index);
+        }
+
+        private static void TryRestoreConsole()
+        {
+            try
+            {
+                Console.CursorVisible = true;
+            }
+            catch (Exception)
+            {
+                // В неинтерактивной среде (перенаправленный вывод) курсор недоступен.
+            }
+
+            Console.ResetColor();
+        }
+
         private static GameSettings CreateSettings()
         {
             int width = 30;
@@ -276,6 +361,7 @@ namespace Cert.Nats.Listener
             Console.WriteLine();
             Console.WriteLine("Использование:");
             Console.WriteLine("  dotnet run                 — играть (стрелки/WASD, P — пауза, R — заново, Q — выход)");
+            Console.WriteLine("  dotnet run -- --stats      — прогресс, лучшие и последние результаты из БД");
             Console.WriteLine("  dotnet run -- --selftest   — самопроверка игровой логики");
             Console.WriteLine("  dotnet run -- --demo [тики] [seed] — демо-режим бота");
         }

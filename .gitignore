@@ -352,3 +352,8 @@ MigrationBackup/
 
 # Fody - auto-generated XML schema
 FodyWeavers.xsd
+
+# Локальный кластер PostgreSQL (данные БД рядом с проектом)
+Data/pgdata/
+Data/*.log
+Data/pgctl.*
