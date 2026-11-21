@@ -65,7 +65,8 @@ Snake.Domain ◄── Snake.Core ◄── Snake.Application ◄── Snake.Pe
 | `GameEngine` | `Snake.Application/Game/GameEngine.cs` | `Start`, `Tick`, `TryTurn`, `TogglePause`, `IsMoveSafe`; свойства `Board`, `Snake`, `Head`, `Food`, `Score`, `Level`, `Length`, `FrameDelayMs`, `CellsPerSecond`, `State`, `StatusMessage`, `Direction` |
 | `SnakeBody` | `Snake.Application/Game/SnakeBody.cs` | `: BaseSnakeBody`, `Segments[0]` — голова |
 | `GameApp` | `Snake.Application/Game/GameApp.cs` | **игровой цикл**: `ConsoleInput.Poll()` + `Tick()` по `Stopwatch` + `ConsoleRenderer.Draw()`; после `Tick()` вызывает `SaveFinishedRun()` → `IGameResultSink` (один раз на партию) |
-| `ConsoleRenderer` | `Snake.Application/Renderer/ConsoleRenderer.cs` | `Console.SetCursorPosition/ForegroundColor`; `RenderText()` для неинтерактивного вывода |
+| `ConsoleRenderer` | `Snake.Application/Renderer/ConsoleRenderer.cs` | псевдографика (`╭╮╰╯│─`) + 24-битные ANSI-цвета (`\u001b[38;2;r;g;bm`); градиент тела, пульс еды, первый кадр очищает экран; `RenderText()` — тот же кадр без цвета для демо |
+| `AnsiConsole` | `Snake.Console/AnsiConsole.cs` | включает `ENABLE_VIRTUAL_TERMINAL_PROCESSING` в Windows; возвращает `false` — рендер идёт без цвета |
 | `ConsoleInput` | `Snake.Application/Keys/ConsoleInput.cs` | статический, `Console.ReadKey(true)`, разбор escape-последовательностей |
 | `SimpleBot` | `Snake.Application/Game/SimpleBot.cs` | жадный бот, нужен `--demo` |
 | `GameCommand` | `Snake.Domain/Enum/GameCommand.cs` | `None, Up, Down, Left, Right, Pause, Restart, Quit` |
@@ -213,6 +214,7 @@ Snake.Console/
   ConsoleRenderer.cs                   (перенести из Application)
   ConsoleGameLoop.cs                   (перенести GameApp из Application)
   ScoreboardView.cs
+  AnsiConsole.cs                       включение VT / 24-битных цветов
   FileLogger*.cs
 Data/
   pgdata/                              кластер PostgreSQL (в git не попадает)
@@ -393,6 +395,7 @@ dotnet run --project Snake.Console                      # играть
 - При интерактивном запуске сначала печатается экран прогресса и ждётся любая клавиша; первый кадр игры вызывает `Console.Clear()`, поэтому «хвостов» от сводки не остаётся. Если партий ещё нет — паузы нет.
 - Поле считается по фактическому окну консоли (окно **не** меняем): `width = min(120, (WindowWidth - 3) / 2)`, `height = min(50, WindowHeight - 9)`. Запас в одну колонку и одну строку обязателен: строка ровно в ширину окна вызывает перенос, а запись в последнюю строку — прокрутку, и кадр «съезжает».
 - Размер окна можно восстановить из лога: при старте пишется строка `Консоль: {Cols}x{Rows}, поле: {Width}x{Height}`.
+- Графика: клетка = **2 символа** (`width = (cols - 3) / 2`). Голова `█`, тело `▓` с градиентом, еда `●` (меняет оттенок каждый тик), препятствие `▒`, рамка `╭╮╰╯│─`. Цвета 24-битные; если `AnsiConsole.TryEnable()` вернул `false` — тот же кадр рисуется без escape-кодов. Каждая строка кадра ровно `FrameWidth` видимых символов (проверено на `--demo`).
 - Если PostgreSQL не запущен, игра продолжает работать: выводится `[БД] PostgreSQL недоступна…`, результаты не сохраняются.
 - `--selftest` и `--demo` работают и при перенаправленном выводе: консольные вызовы курсора выполняются только в интерактивном режиме.
 - Unity: Play Mode, 60 fps, ввод, рестарт, пустая консоль ошибок.

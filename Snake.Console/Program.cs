@@ -82,7 +82,10 @@ namespace Cert.Nats.Listener
                 GameSettings settings = CreateSettings();
                 LogSizes(settings);
                 GameEngine engine = new GameEngine(settings, new Random());
-                ConsoleRenderer renderer = new ConsoleRenderer(settings);
+
+                // 24-битные цвета — только если терминал их умеет; иначе монохром.
+                bool color = AnsiConsole.TryEnable();
+                ConsoleRenderer renderer = new ConsoleRenderer(settings, color);
 
                 IGameResultSink sink;
                 IGameResultReader reader;
