@@ -80,6 +80,7 @@ namespace Cert.Nats.Listener
                 }
 
                 GameSettings settings = CreateSettings();
+                LogSizes(settings);
                 GameEngine engine = new GameEngine(settings, new Random());
                 ConsoleRenderer renderer = new ConsoleRenderer(settings);
 
@@ -319,6 +320,23 @@ namespace Cert.Nats.Listener
             Console.ResetColor();
         }
 
+        private static void LogSizes(GameSettings settings)
+        {
+            try
+            {
+                if (!Console.IsOutputRedirected)
+                {
+                    _logger?.LogInformation(
+                        "Консоль: {Cols}x{Rows}, поле: {Width}x{Height}",
+                        Console.WindowWidth, Console.WindowHeight, settings.BoardWidth, settings.BoardHeight);
+                }
+            }
+            catch (Exception)
+            {
+                // Размер недоступен — не повод падать.
+            }
+        }
+
         private static GameSettings CreateSettings()
         {
             int width = 30;
@@ -328,8 +346,13 @@ namespace Cert.Nats.Listener
             {
                 if (!Console.IsOutputRedirected)
                 {
-                    width = Math.Min(30, Math.Max(16, (Console.WindowWidth - 2) / 2));
-                    height = Math.Min(20, Math.Max(10, Console.WindowHeight - 8));
+                    // Поле занимает всё окно: 2 символа на клетку + рамка.
+                    // По одной колонке и строке запаса — иначе перенос строки
+                    // и прокрутка на последней строке «кривят» кадр.
+                    int columns = Console.WindowWidth;
+                    int rows = Console.WindowHeight;
+                    width = Math.Max(10, Math.Min(120, (columns - 3) / 2));
+                    height = Math.Max(10, Math.Min(50, rows - 9));
                 }
             }
             catch (System.IO.IOException)
